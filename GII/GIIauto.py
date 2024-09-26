@@ -1,0 +1,288 @@
+from selenium import webdriver
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+from openai import OpenAI
+from dotenv import load_dotenv
+import os,re
+from openpyxl import Workbook
+from openpyxl.styles import Alignment
+
+load_dotenv()
+data=[]
+
+api_key = os.getenv("OPENAI_API_KEY")
+edge_driver_path = r"C:\Users\adity\Downloads\msedgedriver.exe"
+
+service = Service(edge_driver_path)
+driver = webdriver.Edge(service=service)
+
+url = "https://www.skyquestt.com/report/structural-adhesive-market"
+driver.get(url)
+
+WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.CLASS_NAME, "nav-tabs"))
+)
+page_source1 = driver.page_source
+
+toc_tab = driver.find_element(By.CSS_SELECTOR, "a[href='#tab_default_3']")
+toc_tab.click()
+
+WebDriverWait(driver, 10).until(
+    EC.visibility_of_element_located((By.ID, "tab_default_3"))
+)
+
+toc_element = driver.find_element(By.ID, "tab_default_3")
+
+WebDriverWait(driver, 10).until(
+    EC.visibility_of_element_located((By.CLASS_NAME, "special-toc-class"))
+)
+
+page_source = driver.page_source
+
+soup = BeautifulSoup(page_source, "html.parser")
+
+
+def AI(text, instruct):
+    openai_client = OpenAI(api_key=api_key)
+
+    prompt = f"{text}"
+    instruction = f"""{instruct}"""
+
+    completion = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    assistant_response = completion.choices[0].message.content
+    return assistant_response
+
+
+def extract_bullet_points(ul_element, level=0):
+    bullet_symbols = ["•", "o", ""]
+    bullet_list = []
+    for li in ul_element.find_all("li", recursive=False):
+        bullet_symbol = bullet_symbols[min(level, len(bullet_symbols) - 1)]
+        bullet_text = []
+        for content in li.contents:
+            if isinstance(content, str):
+                text_content = content.strip()
+                if text_content:
+                    bullet_text.append(text_content)
+            elif content.name == "strong":
+                bullet_text.append(content.get_text(strip=True))
+            elif content.name == "ul":
+                if bullet_text:
+                    bullet_list.append(
+                        f"{bullet_symbol} {' '.join(bullet_text).strip()}"
+                    )
+                bullet_list.extend(extract_bullet_points(content, level + 1))
+                bullet_text = []
+        if bullet_text:
+            bullet_list.append(f"{bullet_symbol} {' '.join(bullet_text).strip()}")
+    return bullet_list
+
+
+
+toc_section = soup.find("div", {"class": "special-toc-class"})
+if toc_section:
+    ul_element = toc_section.find("ul")
+    if ul_element:
+        bullet_points = extract_bullet_points(ul_element)
+
+bullet_points_str = "\n".join(bullet_points)
+lines = bullet_points_str.strip().split("\n")
+toc_content = "\n".join(lines)
+print(toc_content)
+
+
+def extract_report_details(soup):
+        description = soup.find("div", class_="report-details-description")
+        first_para = description.find("p").text.strip()
+        market_name = first_para.split("Market", 1)[0].strip()
+        all_paragraphs = description.find_all("p")
+        remaining_paragraphs = [para.text for para in all_paragraphs[1:]]
+        remaining_text = "\n".join(remaining_paragraphs)
+        remaining_text_instruction = "Rephrase and put in one paragraph i need 250 words"
+        second_para = AI(remaining_text, remaining_text_instruction).strip()
+        third_para = f"""
+        Top-down and bottom-up approaches were used to estimate and validate the size of the {market_name} market and to estimate the size of various other dependent submarkets. The research methodology used to estimate the market size includes the following details: The key players in the market were identified through secondary research, and their market shares in the respective regions were determined through primary and secondary research. This entire procedure includes the study of the annual and financial reports of the top market players and extensive interviews for key insights from industry leaders such as CEOs, VPs, directors, and marketing executives. All percentage shares split, and breakdowns were determined using secondary sources and verified through Primary sources. All possible parameters that affect the markets covered in this research study have been accounted for, viewed in extensive detail, verified through primary research, and analyzed to get the final quantitative and qualitative data.
+        """.strip()
+        forth_para = f"{market_name} Market Segmental Analysis".strip()
+        fifth_para = soup.select_one("#tab_default_1 > div:nth-of-type(3) > p").text.strip()
+        sixth_para = f"Driver of the {market_name} Market".strip()
+        ninth_div = soup.select_one("#tab_default_1 > div:nth-of-type(9)")
+        driver_inst = f"rephrase this market is {market_name} market driver i need 100 words in one paragraph"
+        if ninth_div:
+            drivers = ninth_div.select_one("ul:nth-of-type(1)")
+            if drivers:
+                seventh_para = AI(drivers.text, driver_inst).strip()
+        eighth_para = f"Restraints in the {market_name} Market".strip()
+        ninth_inst = f"rephrase this market is {market_name} market restraint i need 100 words in one paragraph"
+        if ninth_div:
+            restraints_para = None
+            for p in ninth_div.find_all("p"):
+                if "restraints" in p.text.lower():
+                    restraints_para = p
+                    break
+
+            if restraints_para:
+                nextul = restraints_para.find_next_sibling("ul")
+                ninth_para = AI(nextul.text, ninth_inst).strip()
+        tenth_para = f"Market Trends of the {market_name} Market".strip()
+        eleven_div = soup.select_one("#tab_default_1 > div:nth-of-type(11)")
+        eleven_inst = f"rephrase this market is {market_name} market trend i need 100 words in one paragraph  "
+        if eleven_div:
+            ul_eleven = eleven_div.select_one("ul:nth-of-type(1)")
+            if ul_eleven:
+                ul_text = ul_eleven.text.strip()
+                eleven_para = AI(ul_text, eleven_inst).strip()
+            else:
+                print("No <ul> found in the 11th <div>.")
+        else:
+            print("No 11th <div> found in #tab_default_1.")
+
+        description_content = "\n\n".join(
+            [
+                first_para,
+                second_para,
+                third_para,
+                forth_para,
+                fifth_para,
+                sixth_para,
+                seventh_para,
+                eighth_para,
+                ninth_para,
+                tenth_para,
+                eleven_para,
+            ]
+        )  
+        return description_content
+
+soup = BeautifulSoup(page_source1, "html.parser")
+summary=extract_report_details(soup)
+print(summary)
+
+
+
+
+head_div = soup.find(
+    "div", class_="d-sm-flex flex-sm-row-reverse align-items-center title"
+)
+title = head_div.find("h1").text.strip()
+
+
+
+
+
+
+
+code = soup.find("div", class_="report-segment-data max-width-640")
+report_id_tag = code.find("b", string="Report ID:")
+if report_id_tag:
+    product_code = (
+        report_id_tag.next_sibling.strip() if report_id_tag.next_sibling else ""
+    )
+    product_code = re.sub(r"\W+", "", product_code)
+report_len_tag = code.find("b", string="Pages:")
+if report_len_tag:
+    len = report_len_tag.next_sibling.strip() if report_len_tag.next_sibling else ""
+    length = re.sub(r"\W+", "", len)
+
+
+
+
+
+
+sec = soup.find("ol", class_="MuiBreadcrumbs-ol css-nhb8h9")
+sect = sec.find_all("li", class_="MuiBreadcrumbs-li")[1]
+sector = sect.text.strip()
+
+
+
+
+ten_div = soup.select_one("#tab_default_1 > div:nth-of-type(10)")
+compa = ten_div.find("ul")
+companies_list = []
+if compa:
+    for li in compa.find_all("li"):
+        companies_list.append(f"◦ {li.text.strip()}")
+cell_companies = "\n".join(companies_list)
+
+
+
+
+seg = soup.find("td", class_="fw-bold", string="Segments covered")
+next_td = seg.find_next_sibling()
+segments_list = []
+next_td_ul = next_td.find("ul")
+next_td_li = next_td_ul.find_all("li", recursive=False)
+for li in next_td_li:
+    main_category = li.contents[0].strip()
+    subcategory = li.find("ul")
+    if subcategory:
+        subcategory_items = [item.strip() for item in subcategory.stripped_strings]
+        subcategory_text = ", ".join(subcategory_items)
+        formatted_output = f"By {main_category} ({subcategory_text})"
+    else:
+        formatted_output = f"By {main_category}"
+    segments_list.append(formatted_output)
+products = ", ".join(segments_list)
+
+
+description = soup.find("div", class_="report-details-description")
+first_para = description.find("p").text.strip()
+value_pattern = re.compile(r"USD (\d+\.?\d*)\s*(Billion|Million|Trillion)")
+year_pattern = re.compile(r"\b(2022|2023|2031)\b")
+cagr_pattern = re.compile(r"CAGR of (\d+\.?\d*)%")
+
+currency_values = value_pattern.findall(first_para)
+
+years = year_pattern.findall(first_para)
+
+cagr = cagr_pattern.search(first_para)
+
+data_2022 = None
+data_2023 = None
+data_2031 = None
+currency = None
+
+if currency_values:
+    data_2022 = currency_values[0][0]  
+    data_2023 = currency_values[1][0]  
+    data_2031 = currency_values[2][0]  
+    currency = "USD "+currency_values[0][1]  
+
+cagr_value = cagr.group(1) + "%"
+
+countries_list = [
+    "USA", "Canada", "Germany", "Spain", "Italy", "France", "UK", 
+    "China", "India", "Japan", "South Korea", "Brazil", 
+    "GCC Countries", "South Africa"
+]
+formatted_countries = [f"◦ {country}" for country in countries_list]
+cell_countries = "\n".join(formatted_countries)
+
+
+price_single="5300"
+price_sitelesense="6200"
+price_enterprise="7100"
+
+
+wb = Workbook()
+ws = wb.active
+headers = ["Title", "Product Code", "URL", "Date", "Length", "Headline", "Price: Single User\nFormat: PDF & Excel", "Price: Site License\nFormat: PDF & Excel", "Price: Enterprise License\nFormat: PDF & Excel", "Description", "Table of Content","Agenda / Schedule", "Executive Summary", "Sector", "Countries Covered", "Companies Mentioned", "Products Mentioned", "2022", "2023", "2031", "CAGR %", "Currency"]
+ws.append(headers)
+
+data.append([title, product_code, url, "", length, "", price_single, price_sitelesense, price_enterprise, summary, toc_content, "", "", sector, cell_countries, cell_companies, products, data_2022, data_2023, data_2031, cagr_value, currency])
+
+for row in data:
+    ws.append(row)
+
+wb.save("market_reports.xlsx")
+print("Excel file has been created successfully!")
+
