@@ -19,31 +19,13 @@ edge_driver_path = r"C:\Users\adity\Downloads\msedgedriver.exe"
 service = Service(edge_driver_path)
 driver = webdriver.Edge(service=service)
 
-url = "https://www.skyquestt.com/report/dental-imaging-market"
-driver.get(url)
 
-WebDriverWait(driver, 10).until(
-    EC.presence_of_element_located((By.CLASS_NAME, "nav-tabs"))
-)
-page_source1 = driver.page_source
 
-toc_tab = driver.find_element(By.CSS_SELECTOR, "a[href='#tab_default_3']")
-toc_tab.click()
 
-WebDriverWait(driver, 10).until(
-    EC.visibility_of_element_located((By.ID, "tab_default_3"))
-)
+urls = ['https://www.skyquestt.com/report/automotive-wiring-harness-market','https://www.skyquestt.com/report/dental-imaging-market','https://www.skyquestt.com/report/orthodontics-market',
+"https://www.skyquestt.com/report/orthopedic-devices-market","https://www.skyquestt.com/report/ent-devices-market","https://www.skyquestt.com/report/microfluidics-market"
 
-toc_element = driver.find_element(By.ID, "tab_default_3")
-
-WebDriverWait(driver, 10).until(
-    EC.visibility_of_element_located((By.CLASS_NAME, "special-toc-class"))
-)
-
-page_source = driver.page_source
-
-soup = BeautifulSoup(page_source, "html.parser")
-
+]
 
 def AI(text, instruct):
     openai_client = OpenAI(api_key=api_key)
@@ -60,7 +42,6 @@ def AI(text, instruct):
     )
     assistant_response = completion.choices[0].message.content
     return assistant_response
-
 
 def extract_bullet_points(ul_element, level=0):
     bullet_symbols = ["•", "o", ""]
@@ -88,16 +69,7 @@ def extract_bullet_points(ul_element, level=0):
 
 
 
-toc_section = soup.find("div", {"class": "special-toc-class"})
-if toc_section:
-    ul_element = toc_section.find("ul")
-    if ul_element:
-        bullet_points = extract_bullet_points(ul_element)
 
-bullet_points_str = "\n".join(bullet_points)
-lines = bullet_points_str.strip().split("\n")
-toc_content = "\n".join(lines)
-print(toc_content)
 
 
 def extract_report_details(soup):
@@ -163,126 +135,129 @@ def extract_report_details(soup):
         )  
         return description_content
 
-soup = BeautifulSoup(page_source1, "html.parser")
-summary=extract_report_details(soup)
-print(summary)
 
+# Define a function that handles the report extraction logic for each URL
+def scrape_report(url):
+    driver.get(url)
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "nav-tabs")))
+    
+    page_source1 = driver.page_source
+    soup = BeautifulSoup(page_source1, "html.parser")
+  
+    toc_tab = driver.find_element(By.CSS_SELECTOR, "a[href='#tab_default_3']")
+    toc_tab.click()
+    WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.ID, "tab_default_3")))
+    WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.CLASS_NAME, "special-toc-class")))
+    page_source = driver.page_source
+    soup_toc = BeautifulSoup(page_source, "html.parser")
+    print(soup_toc)
+    toc_section = soup_toc.find("div", {"class": "special-toc-class"})
+    print(toc_section)
+    if toc_section:
+        ul_element = toc_section.find("ul")
+        if ul_element:
+            bullet_points = extract_bullet_points(ul_element)
 
-
-
-head_div = soup.find(
-    "div", class_="d-sm-flex flex-sm-row-reverse align-items-center title"
-)
-title = head_div.find("h1").text.strip()
-
-
-
-
-
-
-
-code = soup.find("div", class_="report-segment-data max-width-640")
-report_id_tag = code.find("b", string="Report ID:")
-if report_id_tag:
+    bullet_points_str = "\n".join(bullet_points)
+    lines = bullet_points_str.strip().split("\n")
+    toc_content = "\n".join(lines)
+    
+   
+    # Extract the main report details
+    summary = extract_report_details(soup)
+    
+    # Title
+    head_div = soup.find("div", class_="d-sm-flex flex-sm-row-reverse align-items-center title")
+    title = head_div.find("h1").text.strip() if head_div else ""
+    
+    # Product code and length
+    code = soup.find("div", class_="report-segment-data max-width-640")
+    report_id_tag = code.find("b", string="Report ID:") if code else None
     product_code = (
-        report_id_tag.next_sibling.strip() if report_id_tag.next_sibling else ""
+        report_id_tag.next_sibling.strip() if report_id_tag and report_id_tag.next_sibling else ""
     )
     product_code = re.sub(r"\W+", "", product_code)
-report_len_tag = code.find("b", string="Pages:")
-if report_len_tag:
-    len = report_len_tag.next_sibling.strip() if report_len_tag.next_sibling else ""
-    length = re.sub(r"\W+", "", len)
+    
+    report_len_tag = code.find("b", string="Pages:") if code else None
+    length = (
+        report_len_tag.next_sibling.strip() if report_len_tag and report_len_tag.next_sibling else ""
+    )
+    
+    # Extract sector, companies, countries, products, and other info
+    sector = soup.find("ol", class_="MuiBreadcrumbs-ol css-nhb8h9").find_all("li", class_="MuiBreadcrumbs-li")[1].text.strip() if soup.find("ol", class_="MuiBreadcrumbs-ol css-nhb8h9") else ""
+    
+    companies_list = []
+    ten_div = soup.select_one("#tab_default_1 > div:nth-of-type(10)")
+    compa = ten_div.find("ul") if ten_div else None
+    if compa:
+        for li in compa.find_all("li"):
+            companies_list.append(f"◦ {li.text.strip()}")
+    cell_companies = "\n".join(companies_list)
+    
+    # Segments
+    seg = soup.find("td", class_="fw-bold", string="Segments covered")
+    segments_list = []
+    if seg:
+        next_td = seg.find_next_sibling()
+        next_td_ul = next_td.find("ul")
+        next_td_li = next_td_ul.find_all("li", recursive=False) if next_td_ul else []
+        for li in next_td_li:
+            main_category = li.contents[0].strip()
+            subcategory = li.find("ul")
+            if subcategory:
+                subcategory_items = [item.strip() for item in subcategory.stripped_strings]
+                subcategory_text = ", ".join(subcategory_items)
+                formatted_output = f"By {main_category} ({subcategory_text})"
+            else:
+                formatted_output = f"By {main_category}"
+            segments_list.append(formatted_output)
+    products = ", ".join(segments_list)
+    
+    # Values and years
+    first_para = soup.find("div", class_="report-details-description").find("p").text.strip()
+    value_pattern = re.compile(r"USD (\d+\.?\d*)\s*(Billion|Million|Trillion|billion|million|trillion)")
+    year_pattern = re.compile(r"\b(2022|2023|2031)\b")
+    cagr_pattern = re.compile(r"CAGR of (\d+\.?\d*)%")
+    
+    currency_values = value_pattern.findall(first_para)
+    years = year_pattern.findall(first_para)
+    cagr = cagr_pattern.search(first_para)
+    
+    data_2022 = currency_values[0][0] if currency_values else None
+    data_2023 = currency_values[1][0] if len(currency_values) > 1 else None
+    data_2031 = currency_values[2][0] if len(currency_values) > 2 else None
+    currency = "USD " + currency_values[0][1] if currency_values else None
+    cagr_value = cagr.group(1) + "%" if cagr else ""
+    
+    # Countries covered
+    countries_list = [
+        "USA", "Canada", "Germany", "Spain", "Italy", "France", "UK", 
+        "China", "India", "Japan", "South Korea", "Brazil", 
+        "GCC Countries", "South Africa"
+    ]
+    formatted_countries = [f"◦ {country}" for country in countries_list]
+    cell_countries = "\n".join(formatted_countries)
+    
+    # Prices
+    price_single = "5300"
+    price_sitelesense = "6200"
+    price_enterprise = "7100"
+    
+    # Append the data for this report
+    data.append([title, product_code, url, "", length, "", price_single, price_sitelesense, price_enterprise, summary, toc_content, "", "", sector, cell_countries, cell_companies, products, data_2022, data_2023, data_2031, cagr_value, currency])
 
 
-
-
-
-
-sec = soup.find("ol", class_="MuiBreadcrumbs-ol css-nhb8h9")
-sect = sec.find_all("li", class_="MuiBreadcrumbs-li")[1]
-sector = sect.text.strip()
-
-
-
-
-ten_div = soup.select_one("#tab_default_1 > div:nth-of-type(10)")
-compa = ten_div.find("ul")
-companies_list = []
-if compa:
-    for li in compa.find_all("li"):
-        companies_list.append(f"◦ {li.text.strip()}")
-cell_companies = "\n".join(companies_list)
-
-
-
-
-seg = soup.find("td", class_="fw-bold", string="Segments covered")
-next_td = seg.find_next_sibling()
-segments_list = []
-next_td_ul = next_td.find("ul")
-next_td_li = next_td_ul.find_all("li", recursive=False)
-for li in next_td_li:
-    main_category = li.contents[0].strip()
-    subcategory = li.find("ul")
-    if subcategory:
-        subcategory_items = [item.strip() for item in subcategory.stripped_strings]
-        subcategory_text = ", ".join(subcategory_items)
-        formatted_output = f"By {main_category} ({subcategory_text})"
-    else:
-        formatted_output = f"By {main_category}"
-    segments_list.append(formatted_output)
-products = ", ".join(segments_list)
-
-
-description = soup.find("div", class_="report-details-description")
-first_para = description.find("p").text.strip()
-value_pattern = re.compile(r"USD (\d+\.?\d*)\s*(Billion|Million|Trillion|billion|million|trillion)")
-year_pattern = re.compile(r"\b(2022|2023|2031)\b")
-cagr_pattern = re.compile(r"CAGR of (\d+\.?\d*)%")
-
-currency_values = value_pattern.findall(first_para)
-
-years = year_pattern.findall(first_para)
-
-cagr = cagr_pattern.search(first_para)
-
-data_2022 = None
-data_2023 = None
-data_2031 = None
-currency = None
-
-if currency_values:
-    data_2022 = currency_values[0][0]  
-    data_2023 = currency_values[1][0]  
-    data_2031 = currency_values[2][0]  
-    currency = "USD "+currency_values[0][1]  
-
-cagr_value = cagr.group(1) + "%"
-
-countries_list = [
-    "USA", "Canada", "Germany", "Spain", "Italy", "France", "UK", 
-    "China", "India", "Japan", "South Korea", "Brazil", 
-    "GCC Countries", "South Africa"
-]
-formatted_countries = [f"◦ {country}" for country in countries_list]
-cell_countries = "\n".join(formatted_countries)
-
-
-price_single="5300"
-price_sitelesense="6200"
-price_enterprise="7100"
-
-
+# Loop through all the URLs and scrape each report
+for url in urls:
+    scrape_report(url)
+    
 wb = Workbook()
 ws = wb.active
 headers = ["Title", "Product Code", "URL", "Date", "Length", "Headline", "Price: Single User\nFormat: PDF & Excel", "Price: Site License\nFormat: PDF & Excel", "Price: Enterprise License\nFormat: PDF & Excel", "Description", "Table of Content","Agenda / Schedule", "Executive Summary", "Sector", "Countries Covered", "Companies Mentioned", "Products Mentioned", "2022", "2023", "2031", "CAGR %", "Currency"]
 ws.append(headers)
-
-data.append([title, product_code, url, "", length, "", price_single, price_sitelesense, price_enterprise, summary, toc_content, "", "", sector, cell_countries, cell_companies, products, data_2022, data_2023, data_2031, cagr_value, currency])
 
 for row in data:
     ws.append(row)
 
 wb.save("market_reports.xlsx")
 print("Excel file has been created successfully!")
-
