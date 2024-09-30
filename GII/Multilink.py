@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import os,re
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
-
+from time import sleep
 load_dotenv()
 data=[]
 
@@ -22,10 +22,7 @@ driver = webdriver.Edge(service=service)
 
 
 
-urls = ['https://www.skyquestt.com/report/automotive-wiring-harness-market','https://www.skyquestt.com/report/dental-imaging-market','https://www.skyquestt.com/report/orthodontics-market',
-"https://www.skyquestt.com/report/orthopedic-devices-market","https://www.skyquestt.com/report/ent-devices-market","https://www.skyquestt.com/report/microfluidics-market"
-
-]
+urls = ["https://www.skyquestt.com/report/propolis-market","https://www.skyquestt.com/report/insulin-pump-market","https://www.skyquestt.com/report/automotive-ignition-coil-market"]
 
 def AI(text, instruct):
     openai_client = OpenAI(api_key=api_key)
@@ -79,7 +76,7 @@ def extract_report_details(soup):
         all_paragraphs = description.find_all("p")
         remaining_paragraphs = [para.text for para in all_paragraphs[1:]]
         remaining_text = "\n".join(remaining_paragraphs)
-        remaining_text_instruction = "Rephrase and put in one paragraph i need 250 words"
+        remaining_text_instruction = "Rephrase as a market insights in 250 words in one paragraph"
         second_para = AI(remaining_text, remaining_text_instruction).strip()
         third_para = f"""
         Top-down and bottom-up approaches were used to estimate and validate the size of the {market_name} market and to estimate the size of various other dependent submarkets. The research methodology used to estimate the market size includes the following details: The key players in the market were identified through secondary research, and their market shares in the respective regions were determined through primary and secondary research. This entire procedure includes the study of the annual and financial reports of the top market players and extensive interviews for key insights from industry leaders such as CEOs, VPs, directors, and marketing executives. All percentage shares split, and breakdowns were determined using secondary sources and verified through Primary sources. All possible parameters that affect the markets covered in this research study have been accounted for, viewed in extensive detail, verified through primary research, and analyzed to get the final quantitative and qualitative data.
@@ -88,13 +85,13 @@ def extract_report_details(soup):
         fifth_para = soup.select_one("#tab_default_1 > div:nth-of-type(3) > p").text.strip()
         sixth_para = f"Driver of the {market_name} Market".strip()
         ninth_div = soup.select_one("#tab_default_1 > div:nth-of-type(9)")
-        driver_inst = f"rephrase this market is {market_name} market driver i need 100 words in one paragraph"
+        driver_inst = f"Elaborate it as a market driver for {market_name} market in 100 words in one paragraph"
         if ninth_div:
             drivers = ninth_div.select_one("ul:nth-of-type(1)")
             if drivers:
                 seventh_para = AI(drivers.text, driver_inst).strip()
         eighth_para = f"Restraints in the {market_name} Market".strip()
-        ninth_inst = f"rephrase this market is {market_name} market restraint i need 100 words in one paragraph"
+        ninth_inst = f"Elaborate it as a market restraint for {market_name} market in 100 words in one paragraph"
         if ninth_div:
             restraints_para = None
             for p in ninth_div.find_all("p"):
@@ -107,7 +104,7 @@ def extract_report_details(soup):
                 ninth_para = AI(nextul.text, ninth_inst).strip()
         tenth_para = f"Market Trends of the {market_name} Market".strip()
         eleven_div = soup.select_one("#tab_default_1 > div:nth-of-type(11)")
-        eleven_inst = f"rephrase this market is {market_name} market trend i need 100 words in one paragraph  "
+        eleven_inst = f"Elaborate it as a market trend for {market_name} market in 100 words in one paragraph  "
         if eleven_div:
             ul_eleven = eleven_div.select_one("ul:nth-of-type(1)")
             if ul_eleven:
@@ -136,16 +133,17 @@ def extract_report_details(soup):
         return description_content
 
 
-# Define a function that handles the report extraction logic for each URL
 def scrape_report(url):
     driver.get(url)
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "nav-tabs")))
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "tabs-bar")))
     
     page_source1 = driver.page_source
     soup = BeautifulSoup(page_source1, "html.parser")
-  
     toc_tab = driver.find_element(By.CSS_SELECTOR, "a[href='#tab_default_3']")
-    toc_tab.click()
+    driver.execute_script("arguments[0].scrollIntoView(true);", toc_tab)
+    
+    sleep(1)
+    driver.execute_script("arguments[0].click();", toc_tab)
     WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.ID, "tab_default_3")))
     WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.CLASS_NAME, "special-toc-class")))
     page_source = driver.page_source
@@ -182,7 +180,8 @@ def scrape_report(url):
     length = (
         report_len_tag.next_sibling.strip() if report_len_tag and report_len_tag.next_sibling else ""
     )
-    
+    length = re.sub(r"\D+", "", length)
+
     # Extract sector, companies, countries, products, and other info
     sector = soup.find("ol", class_="MuiBreadcrumbs-ol css-nhb8h9").find_all("li", class_="MuiBreadcrumbs-li")[1].text.strip() if soup.find("ol", class_="MuiBreadcrumbs-ol css-nhb8h9") else ""
     
@@ -217,16 +216,15 @@ def scrape_report(url):
     first_para = soup.find("div", class_="report-details-description").find("p").text.strip()
     value_pattern = re.compile(r"USD (\d+\.?\d*)\s*(Billion|Million|Trillion|billion|million|trillion)")
     year_pattern = re.compile(r"\b(2022|2023|2031)\b")
-    cagr_pattern = re.compile(r"CAGR of (\d+\.?\d*)%")
+    cagr_pattern = re.compile(r"CAGR of (\d+\.?\d*)\s*%")
     
     currency_values = value_pattern.findall(first_para)
-    years = year_pattern.findall(first_para)
     cagr = cagr_pattern.search(first_para)
     
     data_2022 = currency_values[0][0] if currency_values else None
     data_2023 = currency_values[1][0] if len(currency_values) > 1 else None
     data_2031 = currency_values[2][0] if len(currency_values) > 2 else None
-    currency = "USD " + currency_values[0][1] if currency_values else None
+    currency = "USD " + currency_values[0][1].title() if currency_values else None
     cagr_value = cagr.group(1) + "%" if cagr else ""
     
     # Countries covered
